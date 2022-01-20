@@ -3,6 +3,32 @@ import zlib
 import exchange
 import os
 import time
+from threading import Timer
+import psutil
+import datetime
+
+
+
+count = 0
+def restart_process(name):
+    formattime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    pids = psutil.pids()
+    name_list = []
+    for pid in pids:
+        p = psutil.Process(pid)
+        process_name = p.name()
+        name_list.append(process_name)
+    # 如果当前进程中已经没有了此应用
+    if name not in name_list:
+        # 声明变量的全局性
+        global count
+        count += 1
+        print(formattime + "第" + str(count) + "次发现异常重连")
+        os.system("start C:\\\"Program Files\"\\\"CAD Exchanger\"\\bin\\Exchanger.exe")
+    global timer
+    timer = Timer(8, restart_process, ("Exchanger.exe",))
+    timer.start()
+
 
 sio = socketio.Client();
 
@@ -43,7 +69,7 @@ def disconnect():
 @sio.on('CONV_REQUEST')
 def on_message(data):
     print('I received a message!')
-    # fp是一个step格式的文件，存到指定的路径下
+    # 将获取到的文件存到指定的路径下
     in_path = "C:\\Users\\aster\\Desktop\\分布式转码\\input\\"
     # 判断是否存在导入文件的存放目录，如果不存在该目录，则创建
     if not os.path.exists(in_path):
@@ -59,15 +85,17 @@ def on_message(data):
     filename = data['fileName']
     out_path = "C:\\Users\\aster\\Desktop\\分布式转码\\output\\"
 
+    # 创建并初始化计时器线程
+    timer = Timer(8, restart_process, ("Exchanger.exe",))
+    timer.start()
     # --------------------文件转换
     try:
-        # 成功转换
+        # 成功转换正常进行的流程
         result = exchange.autoexchange(in_path, filename, out_path)
-
         if result == -1:
             exchange.kill_process('Exchanger')
             time.sleep(2)
-        else:  #文件转换成功
+        else:  # 文件转换成功
             print("文件转换完成")
             # 从指定的路径中获取格式转换完成的文件
             fp2 = open(out_path + filename.split(".")[0] + '.ifc', 'rb');
@@ -76,15 +104,10 @@ def on_message(data):
             zippedContent = zlib.compress(content);
             print(len(zippedContent));
     except Exception as e:
-        # if repr(e).split("\'")[1] == "timed out":
-        #     print("程序崩溃")
-        #     kill_process('Exchanger')
-        # else:
-        #     print(repr(e))
         print(repr(e))
         exchange.kill_process('Exchanger')
-    else:
-        exchange.kill_process('Exchanger')
+    finally:
+        timer.cancel()
 
     # fp2 = open(out_path + filename.split(".")[0] + '.ifc', 'rb');
     # content = fp2.read();
