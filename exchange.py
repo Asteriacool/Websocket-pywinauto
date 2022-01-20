@@ -2,9 +2,8 @@ from pywinauto import application
 from pywinauto import mouse, keyboard
 import time
 import psutil
-import datetime
 import os
-from threading import Timer
+import pyperclip
 
 
 def proc_exist(process_name):
@@ -22,11 +21,6 @@ def get_app():
         # 如果没有运行，就重复打开
         os.system("start C:\\\"Program Files\"\\\"CAD Exchanger\"\\bin\\Exchanger.exe")
         time.sleep(2)
-
-        # app = application.Application(backend='uia').start('C:/Program Files/CAD Exchanger/bin/exchanger')
-        # while not app.is_process_running():
-        #     app = application.Application(backend='uia').start('C:/Program Files/CAD Exchanger/bin/exchanger')
-        # time.sleep(3)
         app = application.Application(backend='uia').connect(path='C:/Program Files/CAD Exchanger/bin/exchanger')
         n = 0
         while not app.is_process_running():
@@ -95,9 +89,10 @@ def export_obj(window, filename, out_path):
     keyboard.send_keys(out_path)
     # keyboard.send_keys("C:\\Users\\aster\\Desktop")
     keyboard.send_keys("{VK_RETURN}")
-    # 修改文件文件名进行搜索
-    win_brow.child_window(title="文件名:", auto_id="1001", control_type="Edit").click_input()
-    keyboard.send_keys(newname)
+    # 修改文件文件名进行保存
+    win_brow.child_window(title="文件名:", auto_id="1001", control_type="Edit").type_keys('^a')
+    pyperclip.copy(newname)
+    window.child_window(title="文件名:", auto_id="1001", control_type="Edit").type_keys('^v')
     keyboard.send_keys("{VK_RETURN}")
 
     # 如果有弹窗就替换掉已经存在的转换后格式文件
@@ -126,7 +121,7 @@ def export_obj(window, filename, out_path):
 # out_path是输出的路径
 def export_ifc(window, filename, out_path):
     oldname = filename
-    newname = oldname.split(".")[0]
+    newname = ".".join(oldname.split(".")[:-1])
     time.sleep(1)
     # 获取菜单中导出文件的按钮
     btn_export = window.child_window(title="Export", control_type="Button")
@@ -155,11 +150,11 @@ def export_ifc(window, filename, out_path):
     keyboard.send_keys(out_path)
     # keyboard.send_keys("C:\\Users\\aster\\Desktop")
     keyboard.send_keys("{VK_RETURN}")
-    # 修改文件文件名进行搜索
-    win_brow.child_window(title="文件名:", auto_id="1001", control_type="Edit").click_input()
-    keyboard.send_keys(newname)
+    # 修改文件文件名进行保存
+    win_brow.child_window(title="文件名:", auto_id="1001", control_type="Edit").type_keys('^a')
+    pyperclip.copy(newname)
+    window.child_window(title="文件名:", auto_id="1001", control_type="Edit").type_keys('^v')
     keyboard.send_keys("{VK_RETURN}")
-
     # 如果有弹窗就替换掉已经存在的转换后格式文件
     controlwindow_is_exist(win_brow)
     # 处理文件崩溃的情况：如果当前的窗口不存在，则文件进入了崩溃的状态，此时返回false
@@ -191,9 +186,10 @@ def get_item(in_path, filename, window):
         keyboard.send_keys(in_path)
         # keyboard.send_keys("C:\\Users\\aster\\Desktop")
         keyboard.send_keys("{VK_RETURN}")
-        # 修改文件文件名进行搜索
-        window.child_window(title="文件名(N):", auto_id="1148", control_type="Edit").click_input()
-        keyboard.send_keys(filename)
+        # 修改文件文件名进行搜索的方式(type_keys)无法键入符号
+        window.child_window(title="文件名(N):", auto_id="1148", control_type="Edit").type_keys('^a')
+        pyperclip.copy(filename)
+        window.child_window(title="文件名(N):", auto_id="1148", control_type="Edit").type_keys('^v')
         window.child_window(title="打开(O)", auto_id="1", control_type="Button").click_input()
     except:
         print("文件不存在")
@@ -236,17 +232,19 @@ def autoexchange(in_path, filename, out_path):
         # 获取弹出的文件选择窗口
         win_brow = win_main.child_window(title="Please choose a file", control_type="Window")
         get_item(in_path, filename, win_brow)
-        # 导入成功的判断
-        if win_main.child_window(title="Import completed.", control_type="Edit").exists():
-            print("文件导入成功！")
-            # 设置等待完成标签提示出现的时间，最大等待时间为3
-            win_main.child_window(title="Display completed.", control_type="Edit").wait('exists', timeout=3)
-            new_file = export_ifc(win_main, filename, out_path)
-            if new_file != -1:
-                print(new_file)
-                return 0
+        # 导入成功的判断：判断5秒之内是否有成功标签出现
+        for i in range(0, 5):
+            if win_main.child_window(title="Import completed.", control_type="Edit").exists():
+                print("文件导入成功！")
+                # 设置等待完成标签提示出现的时间，最大等待时间为5
+                win_main.child_window(title="Display completed.", control_type="Edit").wait('exists', timeout=5)
+                new_file = export_ifc(win_main, filename, out_path)
+                if new_file != -1:
+                    return 0
+                else:
+                    return -1
             else:
-                return -1
+                time.sleep(1)
         else:
             print("文件导入失败！")
             return -1
@@ -279,27 +277,26 @@ def autoexchange(in_path, filename, out_path):
             print("文件导入失败！")
             return -1
 
-
-# 包括异常处理
-def myexchange(in_path, filename, out_path):
-    # 如果出现异常就再执行一次
-    try:
-        # 成功转换
-        result = autoexchange(in_path, filename, out_path)
-        print("文件转换已经完成")
-        if result == -1:
-            kill_process('Exchanger')
-            time.sleep(2)
-    except Exception as e:
-        # if repr(e).split("\'")[1] == "timed out":
-        #     print("程序崩溃")
-        #     kill_process('Exchanger')
-        # else:
-        #     print(repr(e))
-        print(repr(e))
-        kill_process('Exchanger')
-    else:
-        kill_process('Exchanger')
+# # 包括异常处理
+# def myexchange(in_path, filename, out_path):
+#     # 如果出现异常就再执行一次
+#     try:
+#         # 成功转换
+#         result = autoexchange(in_path, filename, out_path)
+#         print("文件转换已经完成")
+#         if result == -1:
+#             kill_process('Exchanger')
+#             time.sleep(2)
+#     except Exception as e:
+#         # if repr(e).split("\'")[1] == "timed out":
+#         #     print("程序崩溃")
+#         #     kill_process('Exchanger')
+#         # else:
+#         #     print(repr(e))
+#         print(repr(e))
+#         kill_process('Exchanger')
+#     else:
+#         kill_process('Exchanger')
 
 
 # main函数中的内容是要出现在socket中的内容
